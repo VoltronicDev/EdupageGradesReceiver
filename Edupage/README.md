@@ -3,9 +3,9 @@
 Small utilities to login to Edupage and print grades.
 
 Files
-- `login-to-edupage.py` — interactive login helper. Prompts for username, password and subdomain, can save a session and optionally persist credentials (environment or encrypted local store).
+- `login-to-edupage.py` — onboarding-style login helper. Prompts for username, password and subdomain, posts them to Edupage, and saves only the resulting session tokens locally (no local credential storage).
 - `print_grades.py` — loads a saved session (or credentials) and prints grades grouped by subject.
-- `edupage_session.py` — helper that saves/loads session cookies and can login using env vars or encrypted local creds.
+- `edupage_session.py` — helper that saves/loads session cookies and can login using environment variables.
 - `creds_store.py` — Windows DPAPI-backed encrypted local credential store (`.edupage_creds`).
 
 Requirements
@@ -23,7 +23,7 @@ python -m pip install --upgrade pip
 python -m pip install edupage-api
 ```
 
-2. Run the interactive login once to create a session and (optionally) save encrypted credentials:
+2. Run the interactive onboarding once to create a session token:
 
 ```powershell
 python .\login-to-edupage.py
@@ -33,8 +33,8 @@ This will prompt for:
 - `Edupage username` (shows `EDUPAGE_USER` default if set)
 - `Password` (hidden)
 - `Edupage subdomain` (shows `EDUPAGE_SUBDOMAIN` default if set)
-- Optionally save session cookies to `.edupage_session.json`
-- Optionally persist username/subdomain to Windows user environment (via `setx`) and/or save encrypted credentials to `.edupage_creds` (recommended instead of storing password in environment).
+- Optionally refresh and save session cookies to `.edupage_session.json`
+- Optional reminder to persist username/subdomain to Windows user environment for faster input (passwords are not persisted).
 
 Usage
 
@@ -54,7 +54,7 @@ python .\print_grades.py
 ```
 
 Security notes
-- `.edupage_creds` is encrypted using Windows DPAPI and is only decryptable by the same Windows user account. It is safer than storing plaintext credentials in environment variables but not suitable for multi-user or cross-machine sharing.
+- This tooling keeps credentials in-memory for the onboarding flow; only session cookies are written locally.
 - `.edupage_session.json` stores session cookies. If an attacker obtains these files while running as your user, they may be able to reuse your session. Keep them private.
 - Add these files to `.gitignore` (this repo includes a `.gitignore` entry for them).
 
