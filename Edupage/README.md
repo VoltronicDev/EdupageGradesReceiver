@@ -7,6 +7,7 @@ Files
 - `print_grades.py` — loads a saved session (or credentials) and prints grades grouped by subject.
 - `edupage_session.py` — helper that saves/loads session cookies and can login using env vars or encrypted local creds.
 - `creds_store.py` — Windows DPAPI-backed encrypted local credential store (`.edupage_creds`).
+- `api/server.py` — FastAPI app exposing grades at `GET /grades` for frontend consumption.
 
 Requirements
 - Python 3.8+ (the project was tested on Windows with Python 3.13)
@@ -43,6 +44,18 @@ Usage
 ```powershell
 python .\print_grades.py
 ```
+
+Run the API server
+------------------
+
+Expose the grades as JSON for a frontend by running the FastAPI server:
+
+```powershell
+python -m pip install fastapi uvicorn
+python -m uvicorn api.server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Then call `GET /grades` (e.g., `http://localhost:8000/grades`). A `401` response indicates missing credentials or an expired session; refresh login with `login-to-edupage.py`.
 
 If no saved session or credentials are found, run `login-to-edupage.py` or set the following environment variables in your shell before running `print_grades.py`:
 
