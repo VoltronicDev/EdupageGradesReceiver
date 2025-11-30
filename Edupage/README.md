@@ -30,6 +30,37 @@ python -m pip install edupage-api
 python .\login-to-edupage.py
 ```
 
+# Edupage Scripts
+
+Small utilities to login to Edupage and print grades.
+
+Files
+- `login-to-edupage.py` — onboarding-style login helper. Prompts for username, password and subdomain, posts them to Edupage, and saves only the resulting session tokens locally (no local credential storage).
+- `print_grades.py` — loads a saved session (or credentials) and prints grades grouped by subject.
+- `edupage_session.py` — helper that saves/loads session cookies and can login using environment variables.
+- `creds_store.py` — Windows DPAPI-backed encrypted local credential store (`.edupage_creds`).
+
+Requirements
+- Python 3.8+ (the project was tested on Windows with Python 3.13)
+- `edupage_api` package (install with `pip install edupage-api` or check the package name your environment uses)
+
+Quick Setup (PowerShell)
+
+1. Create a virtual environment and install dependencies:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install edupage-api
+```
+
+2. Run the interactive onboarding once to create a session token:
+
+```powershell
+python .\login-to-edupage.py
+```
+
 This will prompt for:
 - `Edupage username` (shows `EDUPAGE_USER` default if set)
 - `Password` (hidden)

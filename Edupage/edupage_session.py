@@ -5,7 +5,6 @@ import requests
 
 from edupage_api import Edupage
 from edupage_api.exceptions import NotLoggedInException
-from creds_store import load_creds
 
 _SESSION_FILE = Path(__file__).parent / ".edupage_session.json"
 
@@ -91,20 +90,11 @@ def get_edupage(auto_save: bool = True) -> Edupage | None:
             # other errors (network, API changes) — still attempt env login
             pass
 
-    # Try to load encrypted local credentials if env vars are not present
+    # Load credentials only from the environment. Client-side credential stores are intentionally avoided;
+    # only session tokens should be written locally.
     user = os.getenv("EDUPAGE_USER")
     pw = os.getenv("EDUPAGE_PASS")
     sub = os.getenv("EDUPAGE_SUBDOMAIN")
-    if not all([user, pw, sub]):
-        creds = None
-        try:
-            creds = load_creds()
-        except Exception:
-            creds = None
-        if creds:
-            user = creds.get("user")
-            pw = creds.get("pass")
-            sub = creds.get("subdomain")
 
     if not all([user, pw, sub]):
         return None
