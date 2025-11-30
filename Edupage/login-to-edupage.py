@@ -6,7 +6,7 @@ import subprocess
 import argparse
 
 from edupage_session import save_session
-from creds_store import save_creds, remove_creds
+from creds_store import remove_creds
 from pathlib import Path
 
 
@@ -17,12 +17,19 @@ def prompt_with_default(prompt: str, default: str | None) -> str:
     return input(f"{prompt}: ").strip()
 
 
+def print_section(title: str) -> None:
+    print()
+    print("=" * len(title))
+    print(title)
+    print("=" * len(title))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Interactive Edupage login helper. Prompts for credentials and can save session/credentials."
     )
     parser.add_argument("--no-save", action="store_true", help="Do not save session cookies to disk")
-    parser.add_argument("--save-creds", action="store_true", help="Save encrypted credentials locally without prompting")
+    parser.add_argument("--refresh-session", action="store_true", help="Force overwriting any existing saved session")
     parser.add_argument("--persist-env", action="store_true", help="Persist username/subdomain to Windows user environment without prompting")
     parser.add_argument("--clear-creds", action="store_true", help="Remove stored session and encrypted creds then exit")
     args = parser.parse_args()
@@ -36,9 +43,20 @@ def main() -> None:
             pass
         print("Removed .edupage_session.json and .edupage_creds (if they existed).")
         return
+    print_section("Welcome to Edupage onboarding")
+    print("This guided flow collects your Edupage credentials, sends them securely to Edupage for authentication,"
+          " and saves only the resulting session tokens locally.")
+    print("Credentials are kept in-memory for this login attempt; do not rely on this tool to persist passwords."
+          " If your backend handles DPAPI or other encryption, keep that logic server-side.")
+    print("Never check session files or credentials into source control.")
+
     # Show env defaults in prompts so you can press Enter to reuse them for this session
     default_user = os.getenv("EDUPAGE_USER")
     default_sub = os.getenv("EDUPAGE_SUBDOMAIN")
+
+    print_section("Step 1/3 — Capture account details")
+    print("Enter your Edupage username, password, and school subdomain.")
+    print("Only the session tokens created after login are written to disk; credentials are discarded once login finishes.")
 
     username = prompt_with_default("Edupage username (or e-mail)", default_user)
     password = getpass.getpass("Password: ")
@@ -48,50 +66,55 @@ def main() -> None:
         print("Username, password and subdomain are required to login.")
         raise SystemExit(1)
 
+    print_section("Step 2/3 — Authenticate with Edupage")
+    print("Posting your credentials to Edupage…")
     edupage = Edupage()
     try:
         edupage.login(username, password, subdomain)
     except BadCredentialsException:
-        print("Wrong username or password!")
+        print("❌ Wrong username or password.")
         raise
     except CaptchaException:
-        print("Captcha required!")
+        print("❌ Edupage requested a captcha; complete it in the web UI and retry.")
         raise
 
-    print("Logged in successfully")
+    print("✅ Logged in successfully. Session tokens are ready to be saved.")
 
-    # Ask whether to save session cookies for reuse by `print_grades.py`.
+    print_section("Step 3/3 — Session handling")
+    existing_session = Path(".edupage_session.json").exists()
+    if existing_session and not args.refresh_session:
+        refresh = input("A saved session exists. Refresh/overwrite it now? [Y/n]: ").strip().lower()
+        force_refresh = refresh in ("", "y", "yes")
+    else:
+        force_refresh = args.refresh_session or existing_session
+
     if args.no_save:
         saved = False
+        print("Skipping session save because --no-save was provided.")
     else:
-        save_choice = input("Save session for reuse? [Y/n]: ").strip().lower()
-        if save_choice in ("", "y", "yes"):
-            try:
-                saved = save_session(edupage)
-                if saved:
-                    print("Session saved to .edupage_session.json")
-                else:
-                    print("Could not save session (library may not expose session object).")
-            except Exception as e:
-                saved = False
-                print("Failed to save session:", e)
-        else:
+        if existing_session and not force_refresh:
+            print("Keeping existing session on disk. Use --refresh-session to overwrite it.")
             saved = False
+        else:
+            save_choice = input("Save session tokens locally for reuse? [Y/n]: ").strip().lower()
+            if save_choice in ("", "y", "yes"):
+                try:
+                    saved = save_session(edupage)
+                    if saved:
+                        print("Session saved to .edupage_session.json")
+                    else:
+                        print("Could not save session (library may not expose session object).")
+                except Exception as e:
+                    saved = False
+                    print("Failed to save session:", e)
+            else:
+                saved = False
 
-    # Offer to persist the entered credentials to user environment variables
     print()
-    print("You can persist these values to your Windows user environment so the prompts")
-    print("will be pre-filled on future runs. Storing the password in your environment is")
-    print("insecure and visible to processes running as your user. Proceed only if you accept the risk.")
-    # Persist to environment if requested via flag, otherwise prompt
+    print("⚠️  Avoid storing passwords locally. Session files contain short-lived tokens; keep them private and out of version control.")
     if args.persist_env:
-        persist = "y"
-    else:
-        persist = input("Persist username and subdomain to user environment? [y/N]: ").strip().lower()
-
-    if persist in ("y", "yes"):
+        print("Persisting username and subdomain to the Windows user environment for convenience.")
         try:
-            # setx persists to user environment; also update current process env for immediate use
             subprocess.run(["setx", "EDUPAGE_USER", username], check=False)
             subprocess.run(["setx", "EDUPAGE_SUBDOMAIN", subdomain], check=False)
             os.environ["EDUPAGE_USER"] = username
@@ -100,35 +123,8 @@ def main() -> None:
         except Exception as e:
             print("Failed to persist environment variables:", e)
 
-        if args.persist_env:
-            store_pass = "n"
-        else:
-            store_pass = input("Also persist password to EDUPAGE_PASS? This is insecure. [y/N]: ").strip().lower()
-
-        if store_pass in ("y", "yes"):
-            try:
-                subprocess.run(["setx", "EDUPAGE_PASS", password], check=False)
-                os.environ["EDUPAGE_PASS"] = password
-                print("Saved EDUPAGE_PASS to user environment. New shells will see it.")
-            except Exception as e:
-                print("Failed to persist EDUPAGE_PASS:", e)
-        else:
-            print("Password not persisted.")
-    # Offer to persist encrypted credentials locally (safer than storing password in env)
-    if args.save_creds:
-        enc_choice = "y"
-    else:
-        enc_choice = input("Also save encrypted credentials locally for automatic login? [Y/n]: ").strip().lower()
-
-    if enc_choice in ("", "y", "yes"):
-        try:
-            ok = save_creds({"user": username, "pass": password, "subdomain": subdomain})
-            if ok:
-                print("Credentials saved to .edupage_creds (encrypted for your Windows user).")
-            else:
-                print("Failed to save encrypted credentials.")
-        except Exception as e:
-            print("Failed to save encrypted credentials:", e)
+    if not saved and not args.no_save:
+        print("You chose not to write session tokens locally. Provide credentials again next time or set environment variables.")
 
 
 if __name__ == "__main__":
